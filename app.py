@@ -13,7 +13,7 @@ else:
     st.error("⚠️ يرجى ضبط GEMINI_API_KEY في إعدادات Secrets في موقع Streamlit")
 
 # --- 2. تعريف المسارات (الملفات التي رفعتها) ---
-TEST_BOOK_PATH = "primary6_t2.pdf"
+TEST_BOOK_PATH = "data/test_books/primary6_t2.pdf"
 REF_BOOK_PATH = "primary6_guide.pdf"
 
 # --- 3. الدوال البرمجية ---
