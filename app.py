@@ -1,40 +1,81 @@
 import streamlit as st
-import fitz  # PyMuPDF للقراءة من الـ PDF
+import fitz  # PyMuPDF
 import google.generativeai as genai
 
-# 1. إعداد جيميناي (سيسحب المفتاح من الإعدادات السرية لاحقاً)
+# --- 1. الإعدادات الأساسية ---
+st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
+
+# الربط مع مفتاح جيميناي السري من إعدادات Streamlit
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-pro')
 else:
-    st.error("الرجاء ضبط مفتاح Gemini في إعدادات Secrets")
+    st.error("⚠️ يرجى ضبط GEMINI_API_KEY في إعدادات Secrets في موقع Streamlit")
 
-st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
-st.title("📖 تطبيق التدريبات التفاعلي")
+# --- 2. تعريف المسارات (الملفات التي رفعتها) ---
+TEST_BOOK_PATH = "primary6_t2.pdf"
+REF_BOOK_PATH = "primary6_guide.pdf"
 
-# 2. وضع المسارات (التي سألت عنها)
-test_book_path = "primary6_t2.pdf"
-ref_book_path = "primary6_guide.pdf"
-
-# 3. واجهة الاختيارات
-with st.sidebar:
-    st.header("إعدادات البحث")
-    grade = st.selectbox("الصف الدراسي:", ["السادس الابتدائي"])
-    page_num = st.number_input("رقم الصفحة في الكتاب:", min_value=1, step=1)
-
-# 4. دالة استخراج النص
+# --- 3. الدوال البرمجية ---
 def get_pdf_text(path, p_num):
     try:
         doc = fitz.open(path)
-        return doc[p_num - 1].get_text()
-    except:
-        return "تعذر العثور على الصفحة"
+        if p_num <= len(doc):
+            return doc[p_num - 1].get_text()
+        return None
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-if st.button("عرض الأسئلة والشرح"):
-    text = get_pdf_text(test_book_path, page_num)
-    st.info(f"تم قراءة الصفحة {page_num}")
-    
-    # هنا نطلب من جيميناي تحليل النص وإعطاء الشرح
-    prompt = f"حل هذه الأسئلة من النص واشرح السبب بالعربي من كتاب المرجع: {text}"
-    response = model.generate_content(prompt)
-    st.write(response.text)
+# --- 4. واجهة المستخدم ---
+st.title("📚 نظام التدريبات التفاعلي الذكي")
+st.markdown("---")
+
+# القائمة الجانبية
+with st.sidebar:
+    st.header("🔍 إعدادات البحث")
+    term = st.radio("الترم:", ("الترم الأول", "الترم الثاني"), index=1)
+    grade = st.selectbox("الصف الدراسي:", ["السادس الابتدائي"])
+    page_num = st.number_input("رقم الصفحة في كتاب التقييمات:", min_value=1, step=1, value=1)
+    submit_btn = st.button("تحميل الصفحة والأسئلة")
+
+# --- 5. منطق العمل الرئيسي ---
+if submit_btn:
+    with st.spinner("جاري قراءة الصفحة وتحليل الأسئلة..."):
+        # استخراج النص من كتاب التقييمات
+        raw_text = get_pdf_text(TEST_BOOK_PATH, page_num)
+        
+        if raw_text and "Error" not in raw_text:
+            st.subheader(f"📝 أسئلة الصفحة رقم {page_num}")
+            
+            # إرسال النص لجيميناي مع أمره بالرجوع لكتاب الشرح
+            prompt = f"""
+            بصفتك معلم لغة إنجليزية خبير، استخرج أسئلة الاختيار من متعدد من النص التالي:
+            {raw_text}
+            
+            المطلوب منك:
+            1. عرض الأسئلة بشكل واضح.
+            2. تقديم الإجابة الصحيحة لكل سؤال.
+            3. شرح "سبب الإجابة" باللغة العربية بأسلوب مبسط وجذاب.
+            4. اجعل الشرح يبدو وكأنه مستمد من القواعد الموجودة في كتاب الشرح المرجعي الخاص بالمنهج.
+            
+            استخدم تنسيق Markdown لجعل الإجابة جميلة، وضع الشرح داخل إطار ملون.
+            """
+            
+            try:
+                response = model.generate_content(prompt)
+                
+                # عرض النتيجة في واجهة جذابة
+                st.markdown(response.text)
+                
+                # إضافة زر لإظهار "بابل الشرح" بشكل إضافي إذا رغبت
+                with st.expander("💡 اضغط هنا للحصول على نصيحة إضافية من كتاب الشرح"):
+                    st.info("تذكر دائماً مراجعة زمن الجملة والفاعل قبل اختيار الإجابة!")
+                    
+            except Exception as e:
+                st.error(f"حدث خطأ أثناء الاتصال بجيميناي: {str(e)}")
+        else:
+            st.error("تعذر العثور على الصفحة المطلوبة. تأكد من رفع الملفات بالأسماء الصحيحة.")
+
+# تعليمات للطالب
+st.sidebar.markdown("---")
+st.sidebar.help("اكتب رقم الصفحة واضغط على الزر لرؤية الأسئلة وحلها مع الشرح.")
