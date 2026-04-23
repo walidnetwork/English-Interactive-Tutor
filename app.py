@@ -1,7 +1,6 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import google.generativeai as genai
-
 # --- 1. الإعدادات الأساسية ---
 st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
