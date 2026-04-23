@@ -1,17 +1,19 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import google.generativeai as genai
+
 # --- 1. الإعدادات الأساسية ---
 st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
-# الربط مع مفتاح جيميناي السري من إعدادات Streamlit
+# الربط مع مفتاح جيميناي السري
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-pro')
+    # التعديل الجذري هنا: استخدم هذا الاسم لضمان التوافق التام
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     st.error("⚠️ يرجى ضبط GEMINI_API_KEY في إعدادات Secrets في موقع Streamlit")
 
-# --- 2. تعريف المسارات (الملفات التي رفعتها) ---
+# --- 2. تعريف المسارات (تأكد أن المجلدات مطابقة لـ GitHub) ---
 TEST_BOOK_PATH = "data/test_books/primary6_t2.pdf"
 REF_BOOK_PATH = "primary6_guide.pdf"
 
@@ -20,8 +22,10 @@ def get_pdf_text(path, p_num):
     try:
         doc = fitz.open(path)
         if p_num <= len(doc):
-            return doc[p_num - 1].get_text()
-        return None
+            # استخراج النص مع تنظيفه من المسافات الزائدة
+            text = doc[p_num - 1].get_text().strip()
+            return text if text else "الصفحة فارغة أو عبارة عن صورة فقط."
+        return "رقم الصفحة يتجاوز عدد صفحات الكتاب."
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -40,40 +44,40 @@ with st.sidebar:
 # --- 5. منطق العمل الرئيسي ---
 if submit_btn:
     with st.spinner("جاري قراءة الصفحة وتحليل الأسئلة..."):
-        # استخراج النص من كتاب التقييمات
         raw_text = get_pdf_text(TEST_BOOK_PATH, page_num)
         
-        if raw_text and "Error" not in raw_text:
+        if raw_text and not raw_text.startswith("Error"):
             st.subheader(f"📝 أسئلة الصفحة رقم {page_num}")
             
-            # إرسال النص لجيميناي مع أمره بالرجوع لكتاب الشرح
+            # أمر الذكاء الاصطناعي (Prompt) المطور
             prompt = f"""
-            بصفتك معلم لغة إنجليزية خبير، استخرج أسئلة الاختيار من متعدد من النص التالي:
+            بصفتك معلم لغة إنجليزية خبير، حلل النص التالي المستخرج من كتاب مدرسي:
             {raw_text}
             
             المطلوب منك:
-            1. عرض الأسئلة بشكل واضح.
-            2. تقديم الإجابة الصحيحة لكل سؤال.
-            3. شرح "سبب الإجابة" باللغة العربية بأسلوب مبسط وجذاب.
-            4. اجعل الشرح يبدو وكأنه مستمد من القواعد الموجودة في كتاب الشرح المرجعي الخاص بالمنهج.
+            1. استخراج أسئلة الاختيار من متعدد (MCQs) فقط.
+            2. عرض كل سؤال وبجانبه الإجابة الصحيحة بخط عريض.
+            3. شرح "سبب الإجابة" باللغة العربية بأسلوب تربوي مبسط للطالب.
+            4. أضف لمسة تشجيعية للطالب في نهاية كل إجابة.
             
-            استخدم تنسيق Markdown لجعل الإجابة جميلة، وضع الشرح داخل إطار ملون.
+            استخدم تنسيق Markdown بشكل جذاب، واجعل الشرح في "اقتباس" (Blockquote).
             """
             
             try:
+                # محاولة الاتصال بجيميناي
                 response = model.generate_content(prompt)
-                
-                # عرض النتيجة في واجهة جذابة
                 st.markdown(response.text)
                 
-                # إضافة زر لإظهار "بابل الشرح" بشكل إضافي إذا رغبت
-                with st.expander("💡 اضغط هنا للحصول على نصيحة إضافية من كتاب الشرح"):
-                    st.info("تذكر دائماً مراجعة زمن الجملة والفاعل قبل اختيار الإجابة!")
+                with st.expander("💡 نصيحة تعليمية إضافية"):
+                    st.info("تذكر مراجعة الكلمات الدالة (Key Words) في الجملة قبل اختيار الإجابة!")
                     
             except Exception as e:
-                st.error(f"حدث خطأ أثناء الاتصال بجيميناي: {str(e)}")
+                # إذا ظهر خطأ 404 هنا، فهذا يعني أن المكتبة تحتاج لتحديث
+                st.error(f"عذراً، جيميناي يواجه صعوبة في الاتصال حالياً. تأكد من تحديث ملف requirements.txt")
+                st.write(f"تفاصيل الخطأ التقني: {str(e)}")
         else:
-            st.error("تعذر العثور على الصفحة المطلوبة. تأكد من رفع الملفات بالأسماء الصحيحة.")
+            st.warning(f"⚠️ تنبيه: {raw_text}")
+            st.info("تأكد من أن ملف PDF موجود في المسار: data/test_books/primary6_t2.pdf")
 
 # تعليمات للطالب
 st.sidebar.markdown("---")
