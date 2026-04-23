@@ -7,7 +7,7 @@ st.set_page_config(page_title="مساعد الإنجليزية الذكي", layo
 # الربط مع مفتاح جيميناي السري من إعدادات Streamlit
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash-001')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 else:
     st.error("⚠️ يرجى ضبط GEMINI_API_KEY في إعدادات Secrets في موقع Streamlit")
 
