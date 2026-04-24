@@ -4,13 +4,12 @@ from groq import Groq
 from PIL import Image
 import io
 
-# 1. إعدادات وتنسيق متقدم للترتيب البصري
+# 1. إعدادات التنسيق البصري (تحسين الخطوط والألوان)
 st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-    
     html, body, [class*="st-"] {
         font-family: 'Cairo', sans-serif;
         direction: RTL;
@@ -18,42 +17,57 @@ st.markdown("""
     }
     .main-question-container {
         background-color: #ffffff;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #e1e4e8;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        padding: 18px;
+        border-radius: 12px;
+        border: 1px solid #dee2e6;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .question-text {
+    .question-header {
+        font-weight: bold;
+        color: #1a73e8;
+        margin-bottom: 8px;
         font-size: 1.1em;
-        color: #2c3e50;
-        line-height: 1.6;
-        margin-bottom: 10px;
-        direction: ltr; /* الأسئلة إنجليزية */
+    }
+    .question-content {
+        direction: ltr; /* لضمان ظهور السؤال الإنجليزي بشكل صحيح */
         text-align: left;
+        font-family: 'Arial', sans-serif;
+        color: #202124;
+        font-size: 1.15em;
+        line-height: 1.6;
+        margin-bottom: 12px;
     }
     .highlight-answer {
-        color: #e74c3c;
+        color: #d93025; /* لون أحمر احترافي للإجابة */
         font-weight: bold;
         text-decoration: underline;
+        background-color: #fff8f7;
+        padding: 0 4px;
+        border-radius: 4px;
     }
     details {
-        background: #f8f9fa;
-        padding: 10px;
+        background: #f1f8ff;
+        padding: 12px;
         border-radius: 8px;
-        margin-top: 10px;
         cursor: pointer;
-        border-right: 4px solid #28a745;
+        border-right: 5px solid #28a745;
     }
     summary {
         font-weight: bold;
-        color: #28a745;
+        color: #155724;
         outline: none;
     }
-    .explanation-box {
-        padding: 10px;
-        color: #1e7e34;
+    .explanation-content {
+        margin-top: 10px;
         font-size: 0.95em;
+        color: #3c4043;
+    }
+    .en-inline {
+        direction: ltr;
+        display: inline-block;
+        font-weight: bold;
+        color: #1a73e8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -61,29 +75,34 @@ st.markdown("""
 # 2. الربط مع Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. وظيفة معالجة الـ PDF
+# 3. وظائف معالجة الملف
 def get_page_image(path, p_num):
     doc = fitz.open(path)
     page = doc[p_num - 1]
     pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
     return Image.open(io.BytesIO(pix.tobytes("png")))
 
-# 4. دالة التحليل الذكي (تم تحديث الـ Prompt لإعادة صياغة الأسئلة)
-def get_organized_analysis(text):
+# 4. دالة التحليل المطور (Prompt محسن جداً)
+def get_advanced_analysis(text):
     prompt = f"""
-    أنت معلم لغة إنجليزية خبير. قم بتحليل النص المستخرج وحوله إلى نظام "سؤال وإجابة" منظم جداً للطالب.
-    المطلوب لكل سؤال:
-    1. أعد كتابة السؤال كاملاً كما هو في الكتاب.
-    2. ضع الإجابة الصحيحة داخل نص السؤال بدلاً من النقاط، وغلّف الإجابة بـ <span class="highlight-answer">الإجابة</span>.
-    3. في أسئلة التوصيل، اكتب السطر كاملاً (الكلمة وعريفها الصحيح بجانبها).
-    4. أضف فقاعة "الشرح والسبب" أسفل كل سؤال مباشرة.
+    أنت معلم لغة إنجليزية خبير. قم بتحليل الصفحة المرفقة بدقة عالية.
+    المطلوب:
+    1. استخراج كل سؤال مع الالتزام برقمه الأصلي (مثلاً: 1- , 2- ).
+    2. وضع الإجابة الصحيحة باللغة الإنجليزية حصراً داخل سياق السؤال بلون مميز باستخدام: 
+       <span class="highlight-answer">[English Answer]</span>
+    3. في أسئلة التوصيل (Matching): ادمج الكلمة وتعريفها في جملة واحدة كاملة.
+    4. في خانة الشرح: قدم تفسيراً مزدوجاً (انجليزي + عربي) يوضح المعنى والقاعدة.
     
-    استخدم هذا التنسيق لكل سؤال:
+    التنسيق المطلوب لكل سؤال:
     <div class="main-question-container">
-        <div class="question-text">[نص السؤال كاملاً مع الإجابة الملونة بالداخل]</div>
+        <div class="question-header">السؤال رقم [رقم السؤال]:</div>
+        <div class="question-content">[نص السؤال بالكامل مع الإجابة الإنجليزية بالداخل]</div>
         <details>
-            <summary>💡 لماذا اخترنا هذه الإجابة؟</summary>
-            <div class="explanation-box">[اشرح السبب بالعربية بأسلوب بسيط]</div>
+            <summary>💡 الشرح والسبب (Explanation)</summary>
+            <div class="explanation-content">
+                اشرح بالعربي بوضوح، مع ذكر المفتاح بالإنجليزي مثل: 
+                "اخترنا كلمة <span class='en-inline'>[Answer]</span> لأن التعريف يقول <span class='en-inline'>[Definition]</span>"
+            </div>
         </details>
     </div>
     
@@ -96,29 +115,26 @@ def get_organized_analysis(text):
     )
     return response.choices[0].message.content
 
-# 5. الواجهة البرمجية
-st.title("📚 نظام التفاعل الذكي - نسخة الطالب المنظمة")
+# 5. الواجهة
+st.title("📚 نظام التفاعل الذكي - مساعد الأستاذ وليد")
 pdf_path = "data/test_books/primary6_t2.pdf"
 
 with st.sidebar:
     st.header("⚙️ الإعدادات")
     page_num = st.number_input("اختر الصفحة:", min_value=1, value=1)
-    btn = st.button("🚀 عرض وتحليل منظم")
+    btn = st.button("🚀 عرض وتحليل السؤال")
 
 if btn:
-    col1, col2 = st.columns([1, 1.2])
-    
+    col1, col2 = st.columns([1, 1.3])
     with col1:
         st.subheader("📄 الصفحة الأصلية")
         st.image(get_page_image(pdf_path, page_num), use_container_width=True)
-        
     with col2:
-        st.subheader("📝 الأسئلة المحلولة")
+        st.subheader("📝 الحلول الذكية")
         doc = fitz.open(pdf_path)
         raw_text = doc[page_num - 1].get_text()
-        
-        with st.spinner("⏳ جاري تنظيم الأسئلة وشرحها..."):
-            structured_html = get_organized_analysis(raw_text)
-            st.markdown(structured_html, unsafe_allow_html=True)
+        with st.spinner("⏳ جاري تنظيم الأسئلة وشرحها لطلابك..."):
+            result_html = get_advanced_analysis(raw_text)
+            st.markdown(result_html, unsafe_allow_html=True)
 
-st.caption("تطوير أستاذ وليد 2026 - تجربة تعليمية بصرية متطورة")
+st.caption("برمجة وتطوير أستاذ وليد 2026")
