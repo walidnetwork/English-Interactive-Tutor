@@ -1,137 +1,108 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import fitz
 from groq import Groq
 from PIL import Image
 import io
 
-# 1. إعدادات الصفحة وتحسين الخطوط والتنسيق
+# 1. إعدادات وتنسيق CSS (تم تحسينه ليكون أكثر وضوحاً في العربي والإنجليزي)
 st.set_page_config(page_title="مساعد الإنجليزية التفاعلي", layout="wide")
 
-# CSS متطور لحل مشكلة العربي والإنجليزي وعرض الفقاعات
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
-    
     html, body, [class*="st-"] {
         font-family: 'Cairo', sans-serif;
         direction: RTL;
         text-align: right;
     }
     .question-box {
-        background-color: #f9f9f9;
+        background-color: #ffffff;
         padding: 20px;
         border-radius: 15px;
-        border-right: 8px solid #4A90E2;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        direction: rtl; /* لضمان اتجاه الصندوق عربي */
-    }
-    details {
-        background: #ffffff;
-        padding: 12px;
-        border-radius: 10px;
-        margin-top: 10px;
-        cursor: pointer;
         border: 1px solid #e0e0e0;
-        transition: 0.3s;
+        border-right: 8px solid #007bff;
+        margin-bottom: 20px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
     }
-    details summary {
-        list-style: none;
+    .answer-header {
+        color: #ff4b4b;
         font-weight: bold;
-        color: #2c3e50;
-        outline: none;
+        font-size: 1.1em;
+        margin-bottom: 5px;
     }
-    .answer-text {
-        color: #d35400;
+    .explanation-header {
+        color: #28a745;
         font-weight: bold;
-        direction: ltr; /* الإجابة غالباً إنجليزية */
-        display: inline-block;
+        font-size: 1.1em;
     }
-    .explanation-text {
-        color: #27ae60;
-        line-height: 1.6;
-        display: block;
-        margin-top: 10px;
-    }
-    /* تحسين عرض الإنجليزية داخل النص العربي */
-    span.en {
+    .en-text {
         direction: ltr;
         display: inline-block;
         font-family: 'Arial', sans-serif;
+        font-weight: bold;
+        color: #007bff;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # 2. الربط مع Groq
-if "GROQ_API_KEY" in st.secrets:
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-else:
-    st.error("⚠️ يرجى ضبط المفتاح GROQ_API_KEY")
-    st.stop()
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. دالة تحويل صفحة الـ PDF إلى صورة
-def get_page_image(pdf_path, p_num):
-    doc = fitz.open(pdf_path)
+# 3. دالة معالجة الـ PDF (صورة)
+def get_page_image(path, p_num):
+    doc = fitz.open(path)
     page = doc[p_num - 1]
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # جودة عالية
-    img_data = pix.tobytes("png")
-    return Image.open(io.BytesIO(img_data))
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    return Image.open(io.BytesIO(pix.tobytes("png")))
 
-# 4. دالة معالجة النصوص وطلب التفاعل
-def get_interactive_data(text):
+# 4. دالة التحليل الذكي (تم تعديل الـ Prompt هنا)
+def analyze_content(text):
     prompt = f"""
-    أنت معلم لغة إنجليزية خبير. قم بتحليل الأسئلة التالية وحولها إلى نظام فقاعات تفاعلية.
-    استخدم التنسيق التالي لكل سؤال (تأكد من وضع الكلمات الإنجليزية داخل <span class='en'></span>):
+    أنت معلم لغة إنجليزية خبير. قم بتحليل النص المستخرج من صفحة الكتاب.
+    المطلوب:
+    1. استخرج الأسئلة (سواء كانت اختيار من متعدد أو توصيل Match).
+    2. في أسئلة التوصيل: اكتب الإجابة كاملة (الرقم + الكلمة + الحرف المقابل + التوصيل الصحيح).
+    3. اشرح "لماذا" اخترنا هذه الإجابة بالعربية بأسلوب بسيط.
     
+    نسق النتيجة داخل هذا القالب حصراً لكل سؤال:
     <div class="question-box">
-        <p><b>السؤال:</b> [اكتب السؤال هنا]</p>
-        <details>
-            <summary>💡 الإجابة الصحيحة</summary>
-            <p class="answer-text">[الإجابة هنا]</p>
-        </details>
-        <details>
-            <summary>📝 الشرح والسبب</summary>
-            <p class="explanation-text">[اشرح بالعربي بوضوح لماذا اخترنا هذه الإجابة]</p>
-        </details>
+        <div class="answer-header">💡 الإجابة الصحيحة:</div>
+        <p dir="ltr" class="en-text">[اكتب هنا الإجابة الإنجليزية بدقة]</p>
+        <div class="explanation-header">📝 الشرح والسبب:</div>
+        <p>[اشرح هنا بالعربي]</p>
     </div>
     
     النص: {text}
     """
-    completion = client.chat.completions.create(
+    response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model="llama-3.3-70b-versatile",
     )
-    return completion.choices[0].message.content
+    return response.choices[0].message.content
 
-# 5. بناء الواجهة
-st.title("📚 مساعد الإنجليزية الذكي - أستاذ وليد")
-TEST_BOOK_PATH = "data/test_books/primary6_t2.pdf"
+# 5. الواجهة البرمجية
+st.title("📚 نظام التقييم التفاعلي - أستاذ وليد")
+pdf_path = "data/test_books/primary6_t2.pdf"
 
 with st.sidebar:
-    st.header("🎮 لوحة التحكم")
-    page_num = st.number_input("اختر رقم الصفحة:", min_value=1, value=1)
-    run_btn = st.button("✨ عرض الصفحة وتحليلها")
+    st.header("🎮 التحكم")
+    page_num = st.number_input("اختر الصفحة:", min_value=1, value=1)
+    btn = st.button("🚀 عرض وتحليل الصفحة")
 
-if run_btn:
-    try:
-        col1, col2 = st.columns([1, 1])
+if btn:
+    col1, col2 = st.columns([1, 1.2])
+    
+    with col1:
+        st.subheader("📄 الصفحة الأصلية")
+        st.image(get_page_image(pdf_path, page_num), use_container_width=True)
         
-        with col1:
-            st.subheader("📄 الصفحة الأصلية")
-            img = get_page_image(TEST_BOOK_PATH, page_num)
-            st.image(img, use_container_width=True, caption=f"كتاب التقييم - صفحة {page_num}")
-            
-        with col2:
-            st.subheader("💡 التفاعل والتحليل")
-            doc = fitz.open(TEST_BOOK_PATH)
-            text = doc[page_num - 1].get_text()
-            
-            with st.spinner("⏳ جاري تحليل الأسئلة وترتيب الفقاعات..."):
-                interactive_html = get_interactive_data(text)
-                st.markdown(interactive_html, unsafe_allow_html=True)
-                
-    except Exception as e:
-        st.error(f"حدث خطأ: {e}")
+    with col2:
+        st.subheader("💡 الإجابات والشرح")
+        doc = fitz.open(pdf_path)
+        raw_text = doc[page_num - 1].get_text()
+        
+        with st.spinner("⏳ جاري استخراج الإجابات بدقة..."):
+            result_html = analyze_content(raw_text)
+            st.markdown(result_html, unsafe_allow_html=True)
 
-st.markdown("---")
-st.caption("برمجة وتطوير أستاذ وليد 2026 - تجربة تعليمية متطورة")
+st.caption("تم التطوير بواسطة أستاذ وليد - 2026")
