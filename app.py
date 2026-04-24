@@ -4,43 +4,52 @@ from groq import Groq
 from PIL import Image
 import io
 
-# 1. إعدادات وتنسيق CSS (تم تحسينه ليكون أكثر وضوحاً في العربي والإنجليزي)
+# 1. إعدادات الصفحة وتحسين الـ CSS للفقاعات والتنسيق العربي
 st.set_page_config(page_title="مساعد الإنجليزية التفاعلي", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+    
     html, body, [class*="st-"] {
         font-family: 'Cairo', sans-serif;
         direction: RTL;
         text-align: right;
     }
     .question-box {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #e0e0e0;
-        border-right: 8px solid #007bff;
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 12px;
+        border-right: 6px solid #007bff;
         margin-bottom: 20px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .answer-header {
-        color: #ff4b4b;
+    details {
+        background: #ffffff;
+        padding: 10px;
+        border-radius: 8px;
+        margin-top: 8px;
+        cursor: pointer;
+        border: 1px solid #e9ecef;
+    }
+    summary {
         font-weight: bold;
-        font-size: 1.1em;
-        margin-bottom: 5px;
+        color: #0056b3;
+        outline: none;
     }
-    .explanation-header {
-        color: #28a745;
+    .answer-content {
+        color: #d9534f;
         font-weight: bold;
-        font-size: 1.1em;
-    }
-    .en-text {
         direction: ltr;
-        display: inline-block;
+        display: block;
+        text-align: left;
+        padding: 5px;
         font-family: 'Arial', sans-serif;
-        font-weight: bold;
-        color: #007bff;
+    }
+    .explanation-content {
+        color: #28a745;
+        line-height: 1.6;
+        padding: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -48,31 +57,36 @@ st.markdown("""
 # 2. الربط مع Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. دالة معالجة الـ PDF (صورة)
+# 3. دالة عرض صفحة الـ PDF
 def get_page_image(path, p_num):
     doc = fitz.open(path)
     page = doc[p_num - 1]
     pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
     return Image.open(io.BytesIO(pix.tobytes("png")))
 
-# 4. دالة التحليل الذكي (تم تعديل الـ Prompt هنا)
-def analyze_content(text):
+# 4. دالة التحليل الذكي مع نظام الفقاعات
+def get_interactive_analysis(text):
     prompt = f"""
-    أنت معلم لغة إنجليزية خبير. قم بتحليل النص المستخرج من صفحة الكتاب.
+    أنت معلم لغة إنجليزية خبير. قم بتحليل الأسئلة في النص المرفق.
     المطلوب:
-    1. استخرج الأسئلة (سواء كانت اختيار من متعدد أو توصيل Match).
-    2. في أسئلة التوصيل: اكتب الإجابة كاملة (الرقم + الكلمة + الحرف المقابل + التوصيل الصحيح).
-    3. اشرح "لماذا" اخترنا هذه الإجابة بالعربية بأسلوب بسيط.
+    1. استخرج كل سؤال (سواء اختيار أو توصيل Match).
+    2. في أسئلة التوصيل، يجب ذكر الإجابة كاملة (الرقم + الكلمة + الحرف المقابل + التعريف).
+    3. نسق الإجابة داخل فقاعات تفاعلية (details/summary) كما يلي:
     
-    نسق النتيجة داخل هذا القالب حصراً لكل سؤال:
     <div class="question-box">
-        <div class="answer-header">💡 الإجابة الصحيحة:</div>
-        <p dir="ltr" class="en-text">[اكتب هنا الإجابة الإنجليزية بدقة]</p>
-        <div class="explanation-header">📝 الشرح والسبب:</div>
-        <p>[اشرح هنا بالعربي]</p>
+        <p><b>السؤال:</b> [اكتب نص السؤال هنا]</p>
+        <details>
+            <summary>💡 انقر لعرض الإجابة الصحيحة</summary>
+            <div class="answer-content">[اكتب الإجابة الإنجليزية بدقة هنا]</div>
+        </details>
+        <details>
+            <summary>📝 انقر لعرض الشرح والسبب</summary>
+            <div class="explanation-content">[اشرح السبب بالعربي بأسلوب تعليمي]</div>
+        </details>
     </div>
     
-    النص: {text}
+    النص المستخرج:
+    {text}
     """
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
@@ -80,14 +94,14 @@ def analyze_content(text):
     )
     return response.choices[0].message.content
 
-# 5. الواجهة البرمجية
+# 5. الواجهة الرئيسية
 st.title("📚 نظام التقييم التفاعلي - أستاذ وليد")
 pdf_path = "data/test_books/primary6_t2.pdf"
 
 with st.sidebar:
     st.header("🎮 التحكم")
     page_num = st.number_input("اختر الصفحة:", min_value=1, value=1)
-    btn = st.button("🚀 عرض وتحليل الصفحة")
+    btn = st.button("🚀 تشغيل النظام التفاعلي")
 
 if btn:
     col1, col2 = st.columns([1, 1.2])
@@ -97,12 +111,12 @@ if btn:
         st.image(get_page_image(pdf_path, page_num), use_container_width=True)
         
     with col2:
-        st.subheader("💡 الإجابات والشرح")
+        st.subheader("💡 الأسئلة التفاعلية")
         doc = fitz.open(pdf_path)
         raw_text = doc[page_num - 1].get_text()
         
-        with st.spinner("⏳ جاري استخراج الإجابات بدقة..."):
-            result_html = analyze_content(raw_text)
-            st.markdown(result_html, unsafe_allow_html=True)
+        with st.spinner("⏳ جاري بناء الفقاعات التفاعلية..."):
+            interactive_html = get_interactive_analysis(raw_text)
+            st.markdown(interactive_html, unsafe_allow_html=True)
 
-st.caption("تم التطوير بواسطة أستاذ وليد - 2026")
+st.caption("تم التطوير بواسطة أستاذ وليد - تجربة تعليمية ممتعة 2026")
