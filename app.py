@@ -4,8 +4,8 @@ from groq import Groq
 from PIL import Image
 import io
 
-# 1. إعدادات الصفحة وتحسين الـ CSS للفقاعات والتنسيق العربي
-st.set_page_config(page_title="مساعد الإنجليزية التفاعلي", layout="wide")
+# 1. إعدادات وتنسيق متقدم للترتيب البصري
+st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
 st.markdown("""
 <style>
@@ -16,40 +16,44 @@ st.markdown("""
         direction: RTL;
         text-align: right;
     }
-    .question-box {
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 12px;
-        border-right: 6px solid #007bff;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    .main-question-container {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid #e1e4e8;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .question-text {
+        font-size: 1.1em;
+        color: #2c3e50;
+        line-height: 1.6;
+        margin-bottom: 10px;
+        direction: ltr; /* الأسئلة إنجليزية */
+        text-align: left;
+    }
+    .highlight-answer {
+        color: #e74c3c;
+        font-weight: bold;
+        text-decoration: underline;
     }
     details {
-        background: #ffffff;
+        background: #f8f9fa;
         padding: 10px;
         border-radius: 8px;
-        margin-top: 8px;
+        margin-top: 10px;
         cursor: pointer;
-        border: 1px solid #e9ecef;
+        border-right: 4px solid #28a745;
     }
     summary {
         font-weight: bold;
-        color: #0056b3;
+        color: #28a745;
         outline: none;
     }
-    .answer-content {
-        color: #d9534f;
-        font-weight: bold;
-        direction: ltr;
-        display: block;
-        text-align: left;
-        padding: 5px;
-        font-family: 'Arial', sans-serif;
-    }
-    .explanation-content {
-        color: #28a745;
-        line-height: 1.6;
-        padding: 5px;
+    .explanation-box {
+        padding: 10px;
+        color: #1e7e34;
+        font-size: 0.95em;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -57,31 +61,29 @@ st.markdown("""
 # 2. الربط مع Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. دالة عرض صفحة الـ PDF
+# 3. وظيفة معالجة الـ PDF
 def get_page_image(path, p_num):
     doc = fitz.open(path)
     page = doc[p_num - 1]
     pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
     return Image.open(io.BytesIO(pix.tobytes("png")))
 
-# 4. دالة التحليل الذكي مع نظام الفقاعات
-def get_interactive_analysis(text):
+# 4. دالة التحليل الذكي (تم تحديث الـ Prompt لإعادة صياغة الأسئلة)
+def get_organized_analysis(text):
     prompt = f"""
-    أنت معلم لغة إنجليزية خبير. قم بتحليل الأسئلة في النص المرفق.
-    المطلوب:
-    1. استخرج كل سؤال (سواء اختيار أو توصيل Match).
-    2. في أسئلة التوصيل، يجب ذكر الإجابة كاملة (الرقم + الكلمة + الحرف المقابل + التعريف).
-    3. نسق الإجابة داخل فقاعات تفاعلية (details/summary) كما يلي:
+    أنت معلم لغة إنجليزية خبير. قم بتحليل النص المستخرج وحوله إلى نظام "سؤال وإجابة" منظم جداً للطالب.
+    المطلوب لكل سؤال:
+    1. أعد كتابة السؤال كاملاً كما هو في الكتاب.
+    2. ضع الإجابة الصحيحة داخل نص السؤال بدلاً من النقاط، وغلّف الإجابة بـ <span class="highlight-answer">الإجابة</span>.
+    3. في أسئلة التوصيل، اكتب السطر كاملاً (الكلمة وعريفها الصحيح بجانبها).
+    4. أضف فقاعة "الشرح والسبب" أسفل كل سؤال مباشرة.
     
-    <div class="question-box">
-        <p><b>السؤال:</b> [اكتب نص السؤال هنا]</p>
+    استخدم هذا التنسيق لكل سؤال:
+    <div class="main-question-container">
+        <div class="question-text">[نص السؤال كاملاً مع الإجابة الملونة بالداخل]</div>
         <details>
-            <summary>💡 انقر لعرض الإجابة الصحيحة</summary>
-            <div class="answer-content">[اكتب الإجابة الإنجليزية بدقة هنا]</div>
-        </details>
-        <details>
-            <summary>📝 انقر لعرض الشرح والسبب</summary>
-            <div class="explanation-content">[اشرح السبب بالعربي بأسلوب تعليمي]</div>
+            <summary>💡 لماذا اخترنا هذه الإجابة؟</summary>
+            <div class="explanation-box">[اشرح السبب بالعربية بأسلوب بسيط]</div>
         </details>
     </div>
     
@@ -94,14 +96,14 @@ def get_interactive_analysis(text):
     )
     return response.choices[0].message.content
 
-# 5. الواجهة الرئيسية
-st.title("📚 نظام التقييم التفاعلي - أستاذ وليد")
+# 5. الواجهة البرمجية
+st.title("📚 نظام التفاعل الذكي - نسخة الطالب المنظمة")
 pdf_path = "data/test_books/primary6_t2.pdf"
 
 with st.sidebar:
-    st.header("🎮 التحكم")
+    st.header("⚙️ الإعدادات")
     page_num = st.number_input("اختر الصفحة:", min_value=1, value=1)
-    btn = st.button("🚀 تشغيل النظام التفاعلي")
+    btn = st.button("🚀 عرض وتحليل منظم")
 
 if btn:
     col1, col2 = st.columns([1, 1.2])
@@ -111,12 +113,12 @@ if btn:
         st.image(get_page_image(pdf_path, page_num), use_container_width=True)
         
     with col2:
-        st.subheader("💡 الأسئلة التفاعلية")
+        st.subheader("📝 الأسئلة المحلولة")
         doc = fitz.open(pdf_path)
         raw_text = doc[page_num - 1].get_text()
         
-        with st.spinner("⏳ جاري بناء الفقاعات التفاعلية..."):
-            interactive_html = get_interactive_analysis(raw_text)
-            st.markdown(interactive_html, unsafe_allow_html=True)
+        with st.spinner("⏳ جاري تنظيم الأسئلة وشرحها..."):
+            structured_html = get_organized_analysis(raw_text)
+            st.markdown(structured_html, unsafe_allow_html=True)
 
-st.caption("تم التطوير بواسطة أستاذ وليد - تجربة تعليمية ممتعة 2026")
+st.caption("تطوير أستاذ وليد 2026 - تجربة تعليمية بصرية متطورة")
