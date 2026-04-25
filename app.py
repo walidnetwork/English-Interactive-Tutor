@@ -4,7 +4,7 @@ from groq import Groq
 from PIL import Image
 import io
 
-# 1. إعدادات التنسيق (الأزرار التفاعلية والخط الغامق)
+# 1. إعدادات التنسيق البصري
 st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
 st.markdown("""
@@ -27,7 +27,7 @@ st.markdown("""
         direction: ltr;
         text-align: left;
         font-family: 'Arial', sans-serif;
-        color: #000000; /* خط أسود ملكي غامق */
+        color: #000000;
         font-size: 1.25em;
         font-weight: bold;
         margin-bottom: 15px;
@@ -36,11 +36,10 @@ st.markdown("""
         border-radius: 8px;
     }
     .highlight-answer {
-        color: #d93025; /* أحمر قوي للإجابة */
+        color: #d93025;
         font-weight: 800;
         text-decoration: underline;
     }
-    /* تنسيق أزرار الحل والشرح */
     details {
         background: #ffffff;
         padding: 10px;
@@ -48,20 +47,12 @@ st.markdown("""
         margin-top: 10px;
         cursor: pointer;
         border: 2px solid #28a745;
-        color: #000000;
-    }
-    details[open] {
-        background: #f0fff4;
     }
     summary {
         font-weight: bold;
         color: #155724;
         font-size: 1.1em;
-        list-style: none;
         outline: none;
-    }
-    summary:before {
-        content: "🔘 "; /* شكل الزر */
     }
     .explanation-box {
         margin-top: 10px;
@@ -76,32 +67,28 @@ st.markdown("""
 # 2. الربط مع Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. وظائف معالجة الـ PDF
-def get_page_image(path, p_num):
-    doc = fitz.open(path)
-    page = doc[p_num - 1]
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-    return Image.open(io.BytesIO(pix.tobytes("png")))
-
+# 3. دالة التحليل (تم تعديل الـ Prompt لمنع الترجمة الإنجليزية في الشرح)
 def get_advanced_analysis(text):
     prompt = f"""
     أنت معلم لغة إنجليزية خبير. قم بتحليل الصفحة المرفقة.
     المطلوب لكل سؤال:
-    1. استخرج السؤال كاملاً.
-    2. صمم زرين (فقاعتين) لكل سؤال كما يلي:
+    1. استخرج السؤال كاملاً بالإنجليزية.
+    2. في زر الحل (Answer): اكتب الإجابة بالإنجليزية حصراً.
+    3. في زر الشرح (Explanation): اكتب السبب باللغة العربية فقط بأسلوب تربوي، وممنوع نهائياً كتابة أي ترجمة إنجليزية للشرح.
     
+    التنسيق:
     <div class="main-question-container">
-        <div class="question-text">[نص السؤال بالإنجليزية]</div>
+        <div class="question-text">[السؤال بالإنجليزية]</div>
         <details>
             <summary>انقر هنا لعرض الحل (Answer)</summary>
             <div class="explanation-box" style="direction: ltr; text-align: left;">
-                The answer is: <span class="highlight-answer">[إجابة السؤال بالإنجليزية]</span>
+                The answer is: <span class="highlight-answer">[الإجابة بالإنجليزية]</span>
             </div>
         </details>
         <details>
-            <summary>انقر هنا لعرض الشرح (Explanation)</summary>
+            <summary>انقر هنا لعرض الشرح والسبب</summary>
             <div class="explanation-box">
-                [اشرح بالعربية والإنجليزية لماذا اخترنا هذه الإجابة]
+                [اكتب هنا شرح السبب باللغة العربية فقط]
             </div>
         </details>
     </div>
@@ -114,9 +101,9 @@ def get_advanced_analysis(text):
     )
     return response.choices[0].message.content
 
-# 4. الواجهة الرئيسية
+# 4. الواجهة البرمجية (باقي الكود كما هو)
 st.title("📚 نظام التفاعل الذكي")
-st.subheader("مساعد الأستاذ وليد - النسخة التفاعلية النهائية")
+st.subheader("مساعد الأستاذ وليد - الإصدار المخصص")
 
 page_num = st.number_input("أدخل رقم الصفحة:", min_value=1, value=1, step=1)
 btn = st.button("🚀 تشغيل عرض الحلول والشرح")
@@ -127,12 +114,14 @@ if btn:
     col1, col2 = st.columns([1, 1.2])
     with col1:
         st.subheader("📄 الصفحة الأصلية")
-        st.image(get_page_image(pdf_path, page_num), use_container_width=True)
-    with col2:
-        st.subheader("📝 الأزرار التفاعلية")
         doc = fitz.open(pdf_path)
+        page = doc[page_num - 1]
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        st.image(Image.open(io.BytesIO(pix.tobytes("png"))), use_container_width=True)
+    with col2:
+        st.subheader("📝 التفاعل الذكي")
         raw_text = doc[page_num - 1].get_text()
-        with st.spinner("⏳ جاري إنشاء أزرار الحل والشرح..."):
+        with st.spinner("⏳ جاري إنشاء الحلول والشرح بالعربي..."):
             result_html = get_advanced_analysis(raw_text)
             st.markdown(result_html, unsafe_allow_html=True)
 
