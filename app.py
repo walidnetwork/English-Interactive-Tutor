@@ -24,7 +24,7 @@ st.markdown("""
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     # استخدام هذا الإصدار تحديداً يحل مشكلة الـ 404
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 else:
     st.error("⚠️ يرجى وضع GEMINI_API_KEY في Secrets")
     st.stop()
