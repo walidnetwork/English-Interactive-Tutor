@@ -48,7 +48,8 @@ def get_analysis(text):
     """
     # استخدام موديل Llama 3.1 المستقر جداً
     response = client.chat.completions.create(
-        model="llama3-8b-8192"
+        # استبدل الموديل القديم بهذا الموديل المستقر:
+model="llama-3.3-70b-versatile"
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content
