@@ -20,13 +20,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. الربط مع Gemini (المجاني تماماً)
+# الربط مع Gemini
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # استخدام هذا الإصدار حصراً لمنع تعليق السيرفر
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # هذا السطر يضمن استخدام النسخة المستقرة ويدعم اللغة العربية بذكاء
+    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 else:
-    st.error("⚠️ يرجى وضع مفتاح GEMINI_API_KEY في Secrets")
+    st.error("⚠️ يرجى وضع GEMINI_API_KEY في Secrets")
     st.stop()
 
 # 3. وظائف معالجة الـ PDF
