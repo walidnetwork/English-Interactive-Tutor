@@ -1,10 +1,10 @@
 import streamlit as st
 import fitz
-from groq import Groq
+from openai import OpenAI
 from PIL import Image
 import io
 
-# 1. إعدادات التنسيق البصري
+# 1. إعدادات التنسيق والجماليات
 st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
 st.markdown("""
@@ -51,8 +51,6 @@ st.markdown("""
     summary {
         font-weight: bold;
         color: #155724;
-        font-size: 1.1em;
-        outline: none;
     }
     .explanation-box {
         margin-top: 10px;
@@ -64,19 +62,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. الربط مع Groq
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# 2. الربط مع OpenAI
+if "OPENAI_API_KEY" in st.secrets:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+else:
+    st.error("⚠️ يرجى وضع مفتاح OPENAI_API_KEY في Secrets")
+    st.stop()
 
-# 3. دالة التحليل (تم تعديل الـ Prompt لمنع الترجمة الإنجليزية في الشرح)
-def get_advanced_analysis(text):
+# 3. وظائف المعالجة
+def get_page_image(path, p_num):
+    doc = fitz.open(path)
+    page = doc[p_num - 1]
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    return Image.open(io.BytesIO(pix.tobytes("png")))
+
+def get_gpt_analysis(text):
     prompt = f"""
-    أنت معلم لغة إنجليزية خبير. قم بتحليل الصفحة المرفقة.
+    أنت معلم لغة إنجليزية خبير لطلاب مصريين. قم بتحليل الأسئلة التالية:
     المطلوب لكل سؤال:
-    1. استخرج السؤال كاملاً بالإنجليزية.
-    2. في زر الحل (Answer): اكتب الإجابة بالإنجليزية حصراً.
-    3. في زر الشرح (Explanation): اكتب السبب باللغة العربية فقط بأسلوب تربوي، وممنوع نهائياً كتابة أي ترجمة إنجليزية للشرح.
+    1. استخراج السؤال بالإنجليزية كاملاً.
+    2. الحل (Answer) يكون بالإنجليزية حصراً.
+    3. الشرح (Explanation) يكون باللغة العربية البسيطة فقط، ممنوع تماماً استخدام أي لغة أخرى غير العربية في الشرح.
     
-    التنسيق:
+    نسق النتيجة داخل هذا القالب:
     <div class="main-question-container">
         <div class="question-text">[السؤال بالإنجليزية]</div>
         <details>
@@ -88,7 +96,7 @@ def get_advanced_analysis(text):
         <details>
             <summary>انقر هنا لعرض الشرح والسبب</summary>
             <div class="explanation-box">
-                [اكتب هنا شرح السبب باللغة العربية فقط]
+                [شرح السبب بالعربي الفصيح والمبسط]
             </div>
         </details>
     </div>
@@ -96,33 +104,27 @@ def get_advanced_analysis(text):
     النص: {text}
     """
     response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llama-3.3-70b-versatile",
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content
 
-# 4. الواجهة البرمجية (باقي الكود كما هو)
-st.title("📚 نظام التفاعل الذكي")
-st.subheader("مساعد الأستاذ وليد - الإصدار المخصص")
+# 4. الواجهة
+st.title("📚 نظام التفاعل الذكي (بواسطة ChatGPT)")
+pdf_path = "data/test_books/primary6_t2.pdf"
 
 page_num = st.number_input("أدخل رقم الصفحة:", min_value=1, value=1, step=1)
 btn = st.button("🚀 تشغيل عرض الحلول والشرح")
-
-pdf_path = "data/test_books/primary6_t2.pdf"
 
 if btn:
     col1, col2 = st.columns([1, 1.2])
     with col1:
         st.subheader("📄 الصفحة الأصلية")
-        doc = fitz.open(pdf_path)
-        page = doc[page_num - 1]
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-        st.image(Image.open(io.BytesIO(pix.tobytes("png"))), use_container_width=True)
+        st.image(get_page_image(pdf_path, page_num), use_container_width=True)
     with col2:
         st.subheader("📝 التفاعل الذكي")
+        doc = fitz.open(pdf_path)
         raw_text = doc[page_num - 1].get_text()
-        with st.spinner("⏳ جاري إنشاء الحلول والشرح بالعربي..."):
-            result_html = get_advanced_analysis(raw_text)
+        with st.spinner("⏳ ChatGPT يقوم بتحليل الأسئلة الآن..."):
+            result_html = get_gpt_analysis(raw_text)
             st.markdown(result_html, unsafe_allow_html=True)
-
-st.caption("برمجة وتطوير أستاذ وليد 2026")
