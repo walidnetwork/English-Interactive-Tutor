@@ -1,113 +1,139 @@
 import streamlit as st
+import fitz
+from groq import Groq
+from PIL import Image
+import io
 
-# 1. إعدادات الصفحة الأساسية
-st.set_page_config(page_title="مساعد الإنجليزية - الحلول الذكية", layout="wide")
+# 1. إعدادات التنسيق (الأزرار التفاعلية والخط الغامق)
+st.set_page_config(page_title="مساعد الإنجليزية الذكي", layout="wide")
 
-# 2. إضافة CSS مخصص لتحسين الخطوط واتجاه النصوص (العربي والإنجليزي)
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Tajawal', sans-serif;
-    }
-    
-    .arabic-container {
-        direction: rtl;
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+    html, body, [class*="st-"] {
+        font-family: 'Cairo', sans-serif;
+        direction: RTL;
         text-align: right;
-        padding: 15px;
-        background-color: #f9f9f9;
-        border-radius: 10px;
-        border-right: 5px solid #2ecc71;
-        margin-bottom: 20px;
     }
-    
-    .english-container {
+    .main-question-container {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .question-text {
         direction: ltr;
         text-align: left;
-        padding: 15px;
-        background-color: #eef2f7;
-        border-radius: 10px;
-        border-left: 5px solid #3498db;
-        margin-bottom: 10px;
-        font-weight: 500;
-    }
-
-    .highlight {
-        color: #e74c3c;
+        font-family: 'Arial', sans-serif;
+        color: #000000; /* خط أسود ملكي غامق */
+        font-size: 1.25em;
         font-weight: bold;
+        margin-bottom: 15px;
+        padding: 10px;
+        background-color: #f1f3f5;
+        border-radius: 8px;
+    }
+    .highlight-answer {
+        color: #d93025; /* أحمر قوي للإجابة */
+        font-weight: 800;
         text-decoration: underline;
     }
-    </style>
-    """, unsafe_allow_html=True)
+    /* تنسيق أزرار الحل والشرح */
+    details {
+        background: #ffffff;
+        padding: 10px;
+        border-radius: 8px;
+        margin-top: 10px;
+        cursor: pointer;
+        border: 2px solid #28a745;
+        color: #000000;
+    }
+    details[open] {
+        background: #f0fff4;
+    }
+    summary {
+        font-weight: bold;
+        color: #155724;
+        font-size: 1.1em;
+        list-style: none;
+        outline: none;
+    }
+    summary:before {
+        content: "🔘 "; /* شكل الزر */
+    }
+    .explanation-box {
+        margin-top: 10px;
+        color: #1a1a1a;
+        line-height: 1.6;
+        text-align: right;
+        font-size: 1.1em;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# 3. واجهة المستخدم (Header)
-st.markdown('<div style="text-align: center; direction: rtl;"><h1>الحلول الذكية 📝</h1></div>', unsafe_allow_html=True)
-st.write("---")
+# 2. الربط مع Groq
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 4. دالة لعرض الأسئلة بتنسيق احترافي (تمنع تداخل اللغات)
-def display_question(q_num, en_text, ar_explanation, en_explanation):
-    st.markdown(f'<div class="english-container">{q_num}. {en_text}</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="arabic-container">
-        <b>الشرح بالعربي:</b> {ar_explanation}<br>
-        <small style="color: #7f8c8d;">English Explanation: {en_explanation}</small>
+# 3. وظائف معالجة الـ PDF
+def get_page_image(path, p_num):
+    doc = fitz.open(path)
+    page = doc[p_num - 1]
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    return Image.open(io.BytesIO(pix.tobytes("png")))
+
+def get_advanced_analysis(text):
+    prompt = f"""
+    أنت معلم لغة إنجليزية خبير. قم بتحليل الصفحة المرفقة.
+    المطلوب لكل سؤال:
+    1. استخرج السؤال كاملاً.
+    2. صمم زرين (فقاعتين) لكل سؤال كما يلي:
+    
+    <div class="main-question-container">
+        <div class="question-text">[نص السؤال بالإنجليزية]</div>
+        <details>
+            <summary>انقر هنا لعرض الحل (Answer)</summary>
+            <div class="explanation-box" style="direction: ltr; text-align: left;">
+                The answer is: <span class="highlight-answer">[إجابة السؤال بالإنجليزية]</span>
+            </div>
+        </details>
+        <details>
+            <summary>انقر هنا لعرض الشرح (Explanation)</summary>
+            <div class="explanation-box">
+                [اشرح بالعربية والإنجليزية لماذا اخترنا هذه الإجابة]
+            </div>
+        </details>
     </div>
-    """, unsafe_allow_html=True)
+    
+    النص: {text}
+    """
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.3-70b-versatile",
+    )
+    return response.choices[0].message.content
 
-# 5. دالة لعرض كلمات "المطابقة" (Vocabulary)
-def display_vocabulary(letter, definition, word, translation):
-    st.markdown(f'<div class="english-container"><b>{letter}.</b> {definition}</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="arabic-container">
-        الكلمة الصحيحة: <span class="highlight">{word}</span><br>
-        <b>المعنى:</b> {translation}
-    </div>
-    """, unsafe_allow_html=True)
+# 4. الواجهة الرئيسية
+st.title("📚 نظام التفاعل الذكي")
+st.subheader("مساعد الأستاذ وليد - النسخة التفاعلية النهائية")
 
-# --- تنفيذ المحتوى ---
+page_num = st.number_input("أدخل رقم الصفحة:", min_value=1, value=1, step=1)
+btn = st.button("🚀 تشغيل عرض الحلول والشرح")
 
-# السؤال الأول
-display_question(
-    "1", 
-    "Have you ever used a gadget or a tool to make something? What was it?",
-    "السؤال يطلب منك ذكر مثال لأداة أو جهاز استخدمته لصنع شيء ما.",
-    "The question requires extracting an example of using a tool or device to make something."
-)
+pdf_path = "data/test_books/primary6_t2.pdf"
 
-st.subheader("Match each word with its correct meaning:")
+if btn:
+    col1, col2 = st.columns([1, 1.2])
+    with col1:
+        st.subheader("📄 الصفحة الأصلية")
+        st.image(get_page_image(pdf_path, page_num), use_container_width=True)
+    with col2:
+        st.subheader("📝 الأزرار التفاعلية")
+        doc = fitz.open(pdf_path)
+        raw_text = doc[page_num - 1].get_text()
+        with st.spinner("⏳ جاري إنشاء أزرار الحل والشرح..."):
+            result_html = get_advanced_analysis(raw_text)
+            st.markdown(result_html, unsafe_allow_html=True)
 
-# الفقرات (a, b, c, d)
-display_vocabulary(
-    "a", 
-    "Detailed plan or drawing for making something", 
-    "Blueprint", 
-    "المخطط التفصيلي أو الرسم الهندسي لصنع شيء ما."
-)
-
-display_vocabulary(
-    "b", 
-    "To put parts together to make a whole", 
-    "Assemble", 
-    "تجميع الأجزاء معاً لتكوين شيء كامل."
-)
-
-display_vocabulary(
-    "c", 
-    "To make something better, or more effective", 
-    "Improve", 
-    "تحسين الشيء لجعله أفضل أو أكثر كفاءة."
-)
-
-display_vocabulary(
-    "d", 
-    "Things used to fix, build, or make something", 
-    "Tools / Gadgets", 
-    "الأدوات أو الأجهزة المستخدمة للإصلاح أو البناء."
-)
-
-# 6. زر التحكم السفلي
-st.write("---")
-if st.button("Manage App"):
-    st.balloons()
-    st.info("App is running smoothly!")
+st.caption("برمجة وتطوير أستاذ وليد 2026")
