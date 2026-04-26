@@ -42,25 +42,71 @@ GRADES = [
 # ========== دوال مساعدة ==========
 def extract_text_from_pdf_page(pdf_file, page_num):
     """استخراج النص من صفحة محددة في PDF"""
-    with pdfplumber.open(pdf_file) as pdf:
-        if page_num < 1 or page_num > len(pdf.pages):
-            return None
-        page = pdf.pages[page_num - 1]
-        text = page.extract_text()
-        return text or ""
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            if page_num < 1 or page_num > len(pdf.pages):
+                return None
+            page = pdf.pages[page_num - 1]
+            text = page.extract_text()
+            return text or ""
+    except Exception as e:
+        st.error(f"خطأ في استخراج النص: {str(e)}")
+        return ""
+
+def extract_text_from_pdf_page_enhanced(pdf_file, page_num):
+    """استخراج النص من صفحة PDF مع تحسين التعرف على الأسئلة"""
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            if page_num < 1 or page_num > len(pdf.pages):
+                return None
+            
+            page = pdf.pages[page_num - 1]
+            
+            # استخراج النص العادي
+            text = page.extract_text() or ""
+            
+            # محاولة استخراج النص مع الاحتفاظ بالتنسيق
+            chars = page.chars
+            if chars:
+                # ترتيب الحروف حسب الموضع
+                lines = {}
+                for char in chars:
+                    y = round(char['y0'], 1)
+                    if y not in lines:
+                        lines[y] = []
+                    lines[y].append(char['text'])
+                
+                # بناء النص مع الحفاظ على الترتيب
+                ordered_lines = []
+                for y in sorted(lines.keys()):
+                    line_text = ''.join(lines[y])
+                    if line_text.strip():
+                        ordered_lines.append(line_text)
+                
+                if ordered_lines:
+                    text = '\n'.join(ordered_lines)
+            
+            return text
+    except Exception as e:
+        st.error(f"خطأ في الاستخراج المحسن: {str(e)}")
+        return ""
 
 def render_pdf_page_as_image(pdf_file, page_num):
     """تحويل صفحة PDF إلى صورة لعرضها"""
-    with pdfplumber.open(pdf_file) as pdf:
-        if page_num < 1 or page_num > len(pdf.pages):
-            return None
-        page = pdf.pages[page_num - 1]
-        # تحويل الصفحة إلى صورة
-        im = page.to_image(resolution=150)
-        img_bytes = io.BytesIO()
-        im.save(img_bytes, format="PNG")
-        img_bytes.seek(0)
-        return Image.open(img_bytes)
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            if page_num < 1 or page_num > len(pdf.pages):
+                return None
+            page = pdf.pages[page_num - 1]
+            # تحويل الصفحة إلى صورة
+            im = page.to_image(resolution=150)
+            img_bytes = io.BytesIO()
+            im.save(img_bytes, format="PNG")
+            img_bytes.seek(0)
+            return Image.open(img_bytes)
+    except Exception as e:
+        st.error(f"خطأ في عرض الصفحة: {str(e)}")
+        return None
 
 def call_gemini(prompt, system_prompt=""):
     """استدعاء Gemini API"""
@@ -74,40 +120,107 @@ def call_gemini(prompt, system_prompt=""):
     except Exception as e:
         return f"❌ خطأ: {str(e)}"
 
-def extract_questions_from_text(text):
-    """استخراج الأسئلة من النص باستخدام AI"""
+def extract_questions_from_text(text, page_num=None):
+    """استخراج الأسئلة من النص مع دعم أنماط متعددة"""
+    
+    # إذا كان النص فارغاً
     if not text or not text.strip():
         return []
     
-    prompt = f"""النص التالي مأخوذ من صفحة كتاب تقييمات مدرسي مصري.
-استخرج جميع الأسئلة من هذا النص فقط.
-قم بإرجاع JSON array من الكائنات بهذا التنسيق:
-[{{"id": 1, "text": "نص السؤال الأول"}}, {{"id": 2, "text": "نص السؤال الثاني"}}]
+    # قائمة الكلمات التي تشير إلى وجود سؤال (عربي وإنجليزي)
+    question_markers = [
+        '؟', '?', 'ما', 'ماذا', 'اذكر', 'اكتب', 'اشرح', 'عرف', 'عدد', 'صنف',
+        'Sort', 'Write', 'What', 'Why', 'How', 'When', 'Where', 'Which',
+        'Choose', 'Complete', 'Match', 'Define', 'Explain', 'List',
+        'رتب', 'صنف الكلمات', 'أكمل', 'اختر', 'طابق', 'ضع دائرة'
+    ]
+    
+    # تقسيم النص إلى سطور
+    lines = text.split('\n')
+    questions = []
+    q_num = 1
+    
+    # الأنماط الشائعة للأسئلة
+    import re
+    
+    # النمط 1: أسئلة مرقمة (1- , 2- , 1. , 2. )
+    for line in lines:
+        line = line.strip()
+        if not line or len(line) < 5:
+            continue
+            
+        # إزالة الأرقام من بداية السطر
+        clean_line = re.sub(r'^\d+[\-\.\)\s]*', '', line)
+        clean_line = re.sub(r'^[أ-ي][\-\.\)\s]*', '', clean_line)  # للحروف العربية
+        
+        # التحقق إذا كان السطر يحتوي على كلمات تدل على سؤال
+        is_question = False
+        for marker in question_markers:
+            if marker.lower() in line.lower() or marker.lower() in clean_line.lower():
+                is_question = True
+                break
+        
+        # أيضاً: الأسئلة التي تبدأ بأفعال أمر
+        imperative_starts = ['Sort', 'Write', 'Complete', 'Choose', 'Match', 'Define', 'List', 'رتب', 'اكتب', 'أكمل', 'اختر']
+        for start in imperative_starts:
+            if clean_line.startswith(start) or line.startswith(start):
+                is_question = True
+                break
+        
+        # أيضاً: الأسئلة القصيرة جداً التي تحتوي على كلمات مفقودة
+        if '___' in line or '......' in line or '________' in line:
+            is_question = True
+        
+        if is_question or len(clean_line) > 20:  # النصوص الطويلة قد تكون أسئلة
+            # تنظيف السؤال
+            question_text = clean_line[:300]  # حد الطول
+            
+            questions.append({
+                "id": q_num,
+                "text": question_text
+            })
+            q_num += 1
+            if q_num > 15:  # حد أقصى 15 سؤال لكل صفحة
+                break
+    
+    # إذا لم نجد أسئلة، حاول استخدام Gemini
+    if len(questions) == 0 and model:
+        try:
+            prompt = f"""استخرج جميع الأسئلة والتمارين من النص التالي. 
+النص من كتاب مدرسي وقد يحتوي على:
+- أسئلة تبدأ بـ "Sort", "Write", "What", "Complete", "Choose"
+- تمارين "رتب الكلمات" أو "أكمل الفراغ"
+- أي جملة تطلب من الطالب القيام بشيء
+
+قم بإرجاع JSON array بهذا التنسيق فقط:
+[{{"id": 1, "text": "نص السؤال كاملاً"}}]
 
 لا ترجع أي شيء آخر غير JSON.
 
 النص:
-{text[:4000]}"""
+{text[:3000]}"""
 
-    try:
-        response = call_gemini(prompt, "أنت مساعد تعليمي متخصص. أجب بـ JSON فقط.")
-        # تنظيف الرد
-        clean = re.sub(r'```json\s*|```\s*', '', response)
-        questions = json.loads(clean)
-        return questions if isinstance(questions, list) else []
-    except:
-        # محاولة استخراج أسئلة بسيطة إذا فشل JSON
-        lines = text.split('\n')
-        questions = []
-        q_num = 1
-        for line in lines:
-            line = line.strip()
-            if len(line) > 15 and any(marker in line for marker in ['؟', 'ما', 'من', 'اذكر', 'عرف', 'اشرح']):
-                questions.append({"id": q_num, "text": line[:200]})
+            response = call_gemini(prompt, "أنت مساعد تعليمي. أجب بـ JSON فقط.")
+            clean = re.sub(r'```json\s*|```\s*', '', response)
+            gemini_questions = json.loads(clean)
+            if isinstance(gemini_questions, list) and len(gemini_questions) > 0:
+                return gemini_questions
+        except:
+            pass
+    
+    # إذا لم نجد أسئلة، أنشئ أسئلة افتراضية بناءً على النص المتاح
+    if len(questions) == 0 and text.strip():
+        # خذ الجمل الأطول كأسئلة محتملة
+        sentences = re.split(r'[\.\n!\?]', text)
+        for sent in sentences:
+            sent = sent.strip()
+            if len(sent) > 30 and len(sent) < 300:
+                questions.append({"id": q_num, "text": sent})
                 q_num += 1
-                if q_num > 10:
+                if q_num > 5:
                     break
-        return questions
+    
+    return questions
 
 def get_answer_and_explanation(question_text, ref_text="", page_context=""):
     """الحصول على الإجابة والشرح من AI"""
@@ -314,6 +427,29 @@ if st.session_state.view == 'teacher':
     with col3:
         st.metric("📅 الترمين", "الأول + الثاني")
 
+    # إضافة أزرار حذف الملفات
+    st.markdown("---")
+    st.markdown("#### 🗑️ إدارة الملفات")
+    
+    col_del1, col_del2 = st.columns(2)
+    with col_del1:
+        if st.button("🗑️ مسح ملف التقييمات الحالي", use_container_width=True):
+            if selected_grade_id in st.session_state.files:
+                if term_key in st.session_state.files[selected_grade_id]:
+                    if "book" in st.session_state.files[selected_grade_id][term_key]:
+                        del st.session_state.files[selected_grade_id][term_key]["book"]
+                        st.success("✅ تم مسح ملف التقييمات")
+                        st.rerun()
+    
+    with col_del2:
+        if st.button("📖 مسح ملف المرجع", use_container_width=True):
+            if selected_grade_id in st.session_state.files:
+                if term_key in st.session_state.files[selected_grade_id]:
+                    if "ref" in st.session_state.files[selected_grade_id][term_key]:
+                        del st.session_state.files[selected_grade_id][term_key]["ref"]
+                        st.success("✅ تم مسح ملف المرجع")
+                        st.rerun()
+
 # ========== عرض واجهة الطالب ==========
 else:
     # اختيار الترم
@@ -396,12 +532,18 @@ else:
                             st.session_state.current_page = page_num
                             st.session_state.current_page_image = image
                             
-                            # استخراج النص والأسئلة
-                            text = extract_text_from_pdf_page(book_file, page_num)
+                            # استخراج النص المحسن والأسئلة
+                            text = extract_text_from_pdf_page_enhanced(book_file, page_num)
                             if text:
                                 with st.spinner("جاري استخراج الأسئلة..."):
-                                    questions = extract_questions_from_text(text)
+                                    questions = extract_questions_from_text(text, page_num)
                                     st.session_state.questions = questions
+                                    if len(questions) == 0:
+                                        st.warning("⚠️ لم يتم العثور على أسئلة في هذه الصفحة. تأكد من أن الملف PDF نصي وليس صورياً.")
+                                    else:
+                                        st.success(f"✅ تم استخراج {len(questions)} سؤالاً")
+                            else:
+                                st.warning("⚠️ لم يتم استخراج نص من هذه الصفحة. تأكد من أن الملف PDF نصي وليس صورياً.")
                             st.rerun()
                         else:
                             st.error("رقم الصفحة غير موجود")
@@ -427,22 +569,21 @@ else:
                             image = render_pdf_page_as_image(book_file, new_page)
                             if image:
                                 st.session_state.current_page_image = image
-                                text = extract_text_from_pdf_page(book_file, new_page)
+                                text = extract_text_from_pdf_page_enhanced(book_file, new_page)
                                 if text:
                                     with st.spinner("جاري استخراج الأسئلة..."):
-                                        st.session_state.questions = extract_questions_from_text(text)
+                                        st.session_state.questions = extract_questions_from_text(text, new_page)
                                 st.rerun()
                 with col_next:
                     if st.button("التالي ➡️", use_container_width=True):
                         new_page = st.session_state.current_page + 1
-                        st.session_state.current_page = new_page
                         image = render_pdf_page_as_image(book_file, new_page)
                         if image:
                             st.session_state.current_page_image = image
-                            text = extract_text_from_pdf_page(book_file, new_page)
+                            text = extract_text_from_pdf_page_enhanced(book_file, new_page)
                             if text:
                                 with st.spinner("جاري استخراج الأسئلة..."):
-                                    st.session_state.questions = extract_questions_from_text(text)
+                                    st.session_state.questions = extract_questions_from_text(text, new_page)
                             st.rerun()
             
             with col_questions:
@@ -450,10 +591,11 @@ else:
                 
                 if not st.session_state.questions:
                     st.info("🤖 لم يتم العثور على أسئلة في هذه الصفحة")
+                    st.caption("💡 نصيحة: تأكد من أن ملف PDF يحتوي على نص قابل للقراءة وليس مجرد صور")
                 else:
                     for idx, q in enumerate(st.session_state.questions):
-                        with st.expander(f"❓ السؤال {idx + 1}", expanded=False):
-                            st.markdown(f"**{q['text']}**")
+                        with st.expander(f"❓ {q['text'][:80]}..." if len(q['text']) > 80 else f"❓ {q['text']}", expanded=False):
+                            st.markdown(f"**السؤال:** {q['text']}")
                             
                             col_a, col_e = st.columns(2)
                             
@@ -464,7 +606,7 @@ else:
                                         with st.spinner("جاري الحصول على الإجابة..."):
                                             ref_text = ""
                                             if ref_file:
-                                                page_text = extract_text_from_pdf_page(ref_file, st.session_state.current_page)
+                                                page_text = extract_text_from_pdf_page_enhanced(ref_file, st.session_state.current_page)
                                                 if page_text:
                                                     ref_text = page_text[:2000]
                                             answer, _ = get_answer_and_explanation(q['text'], ref_text)
@@ -478,7 +620,7 @@ else:
                                         with st.spinner("جاري الحصول على الشرح..."):
                                             ref_text = ""
                                             if ref_file:
-                                                page_text = extract_text_from_pdf_page(ref_file, st.session_state.current_page)
+                                                page_text = extract_text_from_pdf_page_enhanced(ref_file, st.session_state.current_page)
                                                 if page_text:
                                                     ref_text = page_text[:2000]
                                             _, explanation = get_answer_and_explanation(q['text'], ref_text)
