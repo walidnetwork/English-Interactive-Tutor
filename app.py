@@ -19,12 +19,44 @@ st.set_page_config(
 # احصل على مفتاح مجاني من: https://aistudio.google.com/app/apikey
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
+# تهيئة النموذج مع محاولة أكثر من نموذج
+model = None
+model_name_used = None
+
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-2.0-flash-exp')  # نموذج مجاني ممتاز
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        # قائمة النماذج المجانية المتاحة (جربها بالترتيب)
+        models_to_try = [
+            ("gemini-1.5-flash", "⚡ Gemini 1.5 Flash (سريع)"),
+            ("gemini-1.5-pro", "🚀 Gemini 1.5 Pro (قوي)"),
+            ("gemini-pro", "📚 Gemini 1.0 Pro (مستقر)"),
+            ("models/gemini-1.5-flash", "⚡ Gemini 1.5 Flash (بالمسار الكامل)"),
+            ("models/gemini-pro", "📚 Gemini Pro (بالمسار الكامل)"),
+        ]
+        
+        for model_name, display_name in models_to_try:
+            try:
+                test_model = genai.GenerativeModel(model_name)
+                # اختبار بسيط للتأكد من أن النموذج يعمل
+                test_response = test_model.generate_content("Say OK")
+                if test_response and test_response.text:
+                    model = test_model
+                    model_name_used = display_name
+                    break
+            except Exception as e:
+                continue
+        
+        if model:
+            st.success(f"✅ تم تفعيل {model_name_used} بنجاح!")
+        else:
+            st.error("❌ لم يتم العثور على أي نموذج Gemini متاح. يرجى التحقق من مفتاح API.")
+            
+    except Exception as e:
+        st.error(f"❌ خطأ في إعداد Gemini: {str(e)}")
 else:
-    st.warning("⚠️ يرجى إضافة مفتاح Gemini API في secrets")
-    model = None
+    st.warning("⚠️ يرجى إضافة مفتاح Gemini API في secrets (Streamlit Cloud) أو إنشاء ملف .streamlit/secrets.toml")
 
 # ========== بيانات الصفوف ==========
 GRADES = [
@@ -118,7 +150,7 @@ def call_gemini(prompt, system_prompt=""):
         response = model.generate_content(full_prompt)
         return response.text
     except Exception as e:
-        return f"❌ خطأ: {str(e)}"
+        return f"❌ خطأ في Gemini: {str(e)}"
 
 def extract_questions_from_text(text, page_num=None):
     """استخراج الأسئلة من النص مع دعم أنماط متعددة"""
@@ -592,6 +624,11 @@ else:
                 if not st.session_state.questions:
                     st.info("🤖 لم يتم العثور على أسئلة في هذه الصفحة")
                     st.caption("💡 نصيحة: تأكد من أن ملف PDF يحتوي على نص قابل للقراءة وليس مجرد صور")
+                    
+                    # عرض النص المستخرج للمساعدة في التشخيص (للمعلم)
+                    if st.checkbox("عرض النص المستخرج (للتشخيص)"):
+                        text = extract_text_from_pdf_page_enhanced(book_file, st.session_state.current_page)
+                        st.text_area("النص المستخرج:", text[:1000], height=200)
                 else:
                     for idx, q in enumerate(st.session_state.questions):
                         with st.expander(f"❓ {q['text'][:80]}..." if len(q['text']) > 80 else f"❓ {q['text']}", expanded=False):
